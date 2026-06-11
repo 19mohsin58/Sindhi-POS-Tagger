@@ -29,8 +29,7 @@ def load_corpus(filepath: str) -> pd.DataFrame:
     pd.DataFrame
         Raw dataframe with all original columns.
     """
-    # TODO: implement
-    pass
+    return pd.read_csv(filepath, encoding='utf-8')
 
 
 def preprocess(df: pd.DataFrame) -> pd.DataFrame:
@@ -38,11 +37,14 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     Clean and expand the raw corpus into a flat supervised dataset.
 
     Steps:
-      1. Keep only 'word' and 'tags' columns.
-      2. Drop rows with missing / dash-placeholder values.
-      3. Expand multi-tag rows (e.g. 'noun,adv') into separate rows.
-      4. Add an 'is_ambiguous' flag for originally multi-tagged words.
-      5. Filter to VALID_TAGS only.
+      1. Fix tag inconsistency: replace isolated 'v' with 'verb' in the tags.
+      2. Drop rows with no tag (missing, dash, or empty values).
+      3. Drop rows with empty/whitespace-only words.
+      4. Add 'is_ambiguous' flag for originally multi-tagged words (those containing commas).
+      5. Explode multi-label rows (split comma-separated tags) into separate rows.
+      6. Filter to VALID_TAGS only.
+      7. Drop exact (word, label) duplicates to avoid data leakage and redundancy.
+      8. Reset index and return cleaned columns.
 
     Parameters
     ----------
@@ -52,7 +54,37 @@ def preprocess(df: pd.DataFrame) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        Cleaned dataframe with columns: ['word', 'label', 'is_ambiguous']
+        Cleaned dataframe with columns: ['word', 'label', 'is_ambiguous', 'word_len']
     """
-    # TODO: implement
-    pass
+    df = df.copy()
+
+    # Step 1: Fix 'v' abbreviation to 'verb'
+    if 'tags' in df.columns:
+        df['tags'] = df['tags'].astype(str).str.replace(r'\bv\b', 'verb', regex=True)
+
+        # Step 2: Drop rows with missing tags
+        df = df[~df['tags'].isin(['-', '', 'nan']) & df['tags'].notna()]
+
+    # Step 3: Drop empty/missing words
+    if 'word' in df.columns:
+        df['word'] = df['word'].astype(str).str.strip()
+        df = df[df['word'] != '']
+
+    # Step 4: Mark ambiguous words
+    df['is_ambiguous'] = df['tags'].str.contains(',', na=False)
+
+    # Step 5: Explode multi-labels -> one row per label
+    df['label'] = df['tags'].str.split(',')
+    df = df.explode('label')
+    df['label'] = df['label'].str.strip()
+
+    # Step 6: Keep only valid tags
+    df = df[df['label'].isin(VALID_TAGS)]
+
+    # Step 7: Drop (word, label) duplicates
+    df['word_len'] = df['word'].str.len()
+    df = df.drop_duplicates(subset=['word', 'label'])
+
+    # Keep only target columns and reset index
+    return df[['word', 'label', 'is_ambiguous', 'word_len']].reset_index(drop=True)
+

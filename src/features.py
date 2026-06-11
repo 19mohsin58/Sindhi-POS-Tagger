@@ -39,5 +39,10 @@ def build_tfidf_vectorizer(
     TfidfVectorizer
         Unfitted vectorizer ready to call .fit_transform() on training data.
     """
-    # TODO: implement
-    pass
+    return TfidfVectorizer(
+        analyzer='char',
+        ngram_range=ngram_range,
+        max_features=max_features,
+        sublinear_tf=sublinear_tf
+    )
+
